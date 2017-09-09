@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package diet_with_gaussian;
+//package diet_with_gaussian;
 
 import java.io.*;
 import java.util.*;
@@ -15,25 +15,35 @@ import java.util.*;
 
 
 class Equation {
-
-    Equation(double a[][], double b[]) {
+    List<ArrayList> a = new ArrayList<>();
+    List<Double> b = new ArrayList<>();
+    
+    Equation(List<ArrayList> a, List<Double> b) {
         this.a = a;
         this.b = b;
     }
 
-    double a[][];
-    double b[];
+
 }
 
 class Position {
+    double value;
+    int column;
+    int row;
 
     Position(int column, int row) {
         this.column = column;
         this.row = row;
+        this.value = 0.0;
     }
+    
+    Position(int column, int row, double value) {
+        this.column = column;
+        this.row = row;
+        this.value = value;
+    }
+    
 
-    int column;
-    int row;
 }
 
 
@@ -52,14 +62,14 @@ public class Diet_with_Gaussian {
         // =============== Step 1. pre-process ==============================
         // take matrix A and vector b, build list A and List b
         // add non-negtivity constraints
-        // remove parallel constraints
-        // detect incorrect (non-overlapping) conditions and return -1
         // modify Alist and bList as they are objects
         // ==================================================================
         List<List> AList = new ArrayList<>();
         List<Double> bList = new ArrayList<>();
-        boolean status = preProcess(A,b,AList,bList);
-        if(!status) return -1;
+        preProcess(A,b,AList,bList);
+        boolean noSoln = true;
+        double maxOBJ = 0.0;
+        int maxIndex = -1;
         
         // =============== Step 2. Initialization Simplex Searching =========
         // Initialize empty lists that will store solutions, objective values
@@ -73,33 +83,78 @@ public class Diet_with_Gaussian {
         
         List<List> sets = setTraverse(bList.size(),AList.get(0).size());
         
+        //System.out.println(Arrays.deepToString(sets.toArray()));
 
         // ============== Step 3. Solving Each Combination ==================
+        // tak list AList, and bList and one subset of sets
+        // 3.a. generate Equation that contains matrix a and vector b
+        // 3.b. Solve with Gaussian Elimination
+        //              3.b.i. 
+        // 3.c. Check constraint validation
         // ==================================================================
         for(int index =0; index<sets.size(); index++){
         // -------------- Step 3.a. rebuild new Equations -------------------
-        // tak list AList, and bList and one subset of sets
-        // generate Equation that contains matrix a and vector b
         // ------------------------------------------------------------------   
 
         List<Integer> subset = sets.get(index);
         Equation myEQ = buildEquations(AList, bList, subset);
         
+        // -------------- Step 3.b. Solve with Gaussian Elimination ---------
+        // ------------------------------------------------------------------ 
+        //System.out.println("0 . Matrix A: " + Arrays.deepToString(myEQ.a.toArray()) + " b: " + Arrays.toString(myEQ.b.toArray()));
+
+        double[] soln = gaussianElimination(myEQ);
+        SolnList.add(soln);
         
         
         
+        // ------- Step 3.c. Check the Solution for Constraint Violation ----
+        // ------------------------------------------------------------------ 
+        boolean goodSoln = checkSolution(soln, AList, bList);
+        Valid.add(goodSoln);
         
+        
+        
+        double OBJ = 0.0;
+        if(goodSoln)for(int i=0; i<c.length; i++) {
+            if(Double.isInfinite(soln[i])&&c[i]!=0.0) return 1;
+            OBJ += soln[i]*c[i];
+        }
+        OBJList.add(OBJ);
         
         
         }
         
+        // ============== Step 4. Find Maxiumu Solution =====================
+        // ==================================================================
         
-
+        
+        for(int iter = 0; iter<OBJList.size(); iter++){
+//            System.out.println("Soln: "+Arrays.toString(SolnList.get(iter)));
+//            System.out.println("Good? "+Valid.get(iter));
+//            System.out.println("OBJ: "+OBJList.get(iter));
+            if(Valid.get(iter)){
+                if(maxOBJ <= OBJList.get(iter)){
+                    noSoln = false;
+                    maxOBJ = OBJList.get(iter);
+                    maxIndex = iter;
+                    
+                    
+                }
+            }
+        }
+        
+        if(noSoln) return -1;
+        
+        
+        System.arraycopy(SolnList.get(maxIndex), 0, x, 0, SolnList.get(maxIndex).length);
+        
+        
         
         return 0;
     }
       
-    static boolean preProcess(double[][] A, double[] b, List<List> AList, List<Double> bList){
+    static void preProcess(double[][] A, double[] b, List<List> AList, List<Double> bList){
         // ==================== Build Initial A,b Lists =====================
         // Matrix (Arrays) A and b can not be modified, transfer these to 
         // arrayLists first
@@ -113,12 +168,6 @@ public class Diet_with_Gaussian {
             bList.add(b[i]);
         }
 
-//        System.out.println("initial");
-//        System.out.println("the matix A: "+ Arrays.toString(AList.toArray()));
-//        System.out.println("the vector b: "+ Arrays.toString(bList.toArray()));
-//        //System.out.println("the subset chosen: " + Arrays.toString(sets.toArray()));
-        
-        
         
         // =============== add non-negativity constraints ===================
         // all x's >= 0   this should be written as    -x_i <= 0
@@ -134,89 +183,41 @@ public class Diet_with_Gaussian {
             bList.add((double) 0);
         }
         
-//        System.out.println("after adding non-negativity");
-//        System.out.println("the matix A: "+ Arrays.toString(AList.toArray()));
-//        System.out.println("the vector b: "+ Arrays.toString(bList.toArray()));
-//        //System.out.println("the subset chosen: " + Arrays.toString(sets.toArray()));
-        
-        // ==================== Check for Parallel Constraints ==============
-        // if A!/A       ==> it is fine, not parallel 
-        // if A//A, b//b ==> remove one
-        // if A//A, b!/b ==> case 1: one constraint is redundant and should be 
-        //                           removed
-        //                   case 2: there is no-over lapping of the two 
-        //                           ==> report no solution
-        //                   case 3: over lapping, that's fine, do nothing
-        // ==================================================================
-        for(int row =0; row<AList.size(); row++){for(int otherRow = 0; otherRow<AList.size(); otherRow++){if(row != otherRow){
-            // ratios is the ratio between each pair of elements of rows in 
-            // matrix A 
-            //System.out.println("comparing row: "+row+" and other row: "+otherRow);
-            List<Double> ratios = new ArrayList<>(); 
-            double ARatio = (double) 0.0;
-            double bRatio = (double) 0.0;
-            
-            for(int col =0; col<AList.get(0).size(); col++){
-                double tempRatio = (double)AList.get(row).get(col)/(double)AList.get(otherRow).get(col);
-                boolean isZero = Objects.equals((double)AList.get(row).get(col), 0.0);
-                if (!(Double.isInfinite(tempRatio)||Double.isNaN(tempRatio))||!isZero){
-                    ratios.add(tempRatio);
-                    //System.out.println(tempRatio);
-                }
-            }
-                bRatio = (double)bList.get(row)/(double)bList.get(otherRow);
-            
-            if(ratios.stream().distinct().limit(2).count() <= 1){ // A parallel
-                //System.out.println("A parallel");
-                ARatio = (double) ratios.get(0);
-                if(Objects.equals(ARatio, bRatio)){
-                    //System.out.println("b parallel");
-                    AList.remove(otherRow);
-                    bList.remove(otherRow);
-                    //System.out.println("*******************removing row: "+otherRow);
-                } else if(ARatio > 0){
-                    //System.out.println("same direction");
-                    if (bList.get(otherRow) > bList.get(row)) {
-                        AList.remove(otherRow);
-                        bList.remove(otherRow);
-                        //System.out.println("*******************removing row: "+otherRow);
-                    } else {
-                        AList.remove(row);
-                        bList.remove(row);
-                        //System.out.println("*******************removing row: "+row);
-                    }
-                } else if ((((double)bList.get(row))+((double)bList.get(otherRow)))<0){
-                    //System.out.println("not overlapping");
-                    return false; // answer if the system of equations are fine
-                }
-            }
-            
-//        System.out.println("after processing");
-//        System.out.println("the matix A: "+ Arrays.toString(AList.toArray()));
-//        System.out.println("the vector b: "+ Arrays.toString(bList.toArray()));
-//        System.out.println();
-//        //System.out.println("the subset chosen: " + Arrays.toString(sets.toArray()));
-            
-            
-        }}}
-        
-        return true;
+
     }
     
-    static boolean checkSolution(double[] solution, Equation myNewEQ) {
-        
-        double[][] A = myNewEQ.a;
-        double[] b = myNewEQ.b;
-        
-        for (int i = 0; i < A.length; i++) {
-            double[] inequality = A[i];
-//            System.out.println("solution: "+ Arrays.toString(solution));
-//            System.out.println("inequality: "+ Arrays.toString(inequality));
-//            System.out.println("b: "+ b[i]);
-//            System.out.println("sum: "+ Arrays.stream(multiplyArrays(solution, inequality)).sum() );
-            if (Arrays.stream(multiplyArrays(solution, inequality)).sum() > b[i])
-                return false;
+    static boolean checkSolution(double[] solution, List<List> A, List<Double> b) {
+//        
+//        double[][] A = myNewEQ.a;
+//        double[] b = myNewEQ.b;
+//        
+//        for (int i = 0; i < A.length; i++) {
+//            double[] inequality = A[i];
+//            if (Arrays.stream(multiplyArrays(solution, inequality)).sum() > b[i])
+//                return false;
+//        }
+        for (int constraint = 0; constraint<A.size(); constraint++){
+            double sum = 0.0;
+            for(int variable = 0; variable<A.get(0).size(); variable++){
+                if(Double.isInfinite(solution[variable])){
+                    //System.out.println("a infinite x");
+                    if((double) A.get(constraint).get(variable) > 0){
+                        //System.out.println("a non-zero coefficient");
+                        return false;
+                    }
+                    sum += 0.0;
+                    
+                } else {
+                    sum += solution[variable]*(double) A.get(constraint).get(variable);
+                }
+                    
+            }
+            if(sum > b.get(constraint)) return false;
         }
+
+        
+
+        
         return true;
     }
     
@@ -228,7 +229,6 @@ public class Diet_with_Gaussian {
         return result;
     }
     
-    
     static List<List> setTraverse(int n, int m){
         List<List> Sets = new ArrayList<>();
         // n # of constraints/restrictions
@@ -237,7 +237,7 @@ public class Diet_with_Gaussian {
         if(m == n){
             List<Integer> subset = new ArrayList<>();
             for (int iter = 0; iter<m; iter ++){
-                subset.add(1);
+                subset.add(iter);
             }
             Sets.add(subset);
             return Sets;
@@ -247,15 +247,12 @@ public class Diet_with_Gaussian {
                 ArrayList<Integer> subset = new ArrayList<>();
                 for (int j = 0; j < n; j++) {
                     if (((i >> j) & 1) == 1) {
-                        subset.add(1);
-                    } else subset.add(0);
+                        subset.add(j);
+                    } 
                 }
-                
-                int sum = subset.stream().mapToInt(Integer::intValue).sum();
-                if (sum == m) Sets.add(subset);                
-                
-            }
 
+                if (subset.size() == m) Sets.add(subset);                              
+            }
             return Sets;
         }
     }
@@ -264,28 +261,110 @@ public class Diet_with_Gaussian {
         List<ArrayList> AE = new ArrayList(); 
         List<Double> bE = new ArrayList(); 
         
-        for(int index =0; index<AList.size(); index++){
-            if((int)subset.get(index) == 1){
+        for(Integer index: subset){
                 AE.add(new ArrayList((AList.get(index))));
                 bE.add(bList.get(index));
-            }
         }
 
-        double[][] Ap = new double[AE.size()][AE.get(0).size()];
-        double[] bp = new double[AE.size()];
-        
-        for (int row = 0; row < AE.size(); row++){
-            bp[row] = (double) bE.get(row);
-            for (int column = 0; column < AE.get(0).size(); column ++){
-                Ap[row][column] = (double) AE.get(row).get(column);
-            }
-            
-        }
-        
-        Equation myEq = new Equation(Ap,bp);
+       
+        Equation myEq = new Equation(AE,bE);
         
         return myEq;
        
+    }
+    
+    static double[] gaussianElimination(Equation myEQ){
+        
+        
+        double[] x = new double[myEQ.b.size()];
+        Arrays.fill(x, 0.0);
+        // -----------------------------------
+        // STEP A: Select Pivot Row and Move it to the Top of the Un-processed Rows
+        // -----------------------------------    
+        
+        
+        for(int col = 0; col<myEQ.a.size(); col++){
+            boolean skip = false;
+            Position Pivot = new Position(-1,-1);
+            for(int row = col; row<myEQ.a.size(); row++){
+                if((double) myEQ.a.get(row).get(col) != 0.0) {
+                        Pivot.row = row;
+                        break; //this row is selected (pivoted) 
+                }
+            }
+            
+            // Parallel Condition
+            if(Pivot.row == -1) {
+//                double[] x = new double[myEQ.b.size()];
+//                Arrays.fill(x, Double.POSITIVE_INFINITY);
+//                return x;
+                skip = true;
+                x[col] = Double.POSITIVE_INFINITY;
+                
+            }
+            
+            if(!skip){
+            ArrayList<Double> processedRow = new ArrayList<>(myEQ.a.get(Pivot.row)); 
+            double temp_b = myEQ.b.get(Pivot.row);
+            myEQ.a.remove(Pivot.row);
+            myEQ.a.add(col, processedRow);
+            myEQ.b.remove(Pivot.row);
+            myEQ.b.add(col, temp_b);
+            
+            
+        // -----------------------------------
+        // STEP B: normalize that pivot element to 1
+        // -----------------------------------  
+            Pivot = new Position(col,col,(double) myEQ.a.get(col).get(col));
+            
+            for(int c=0; c<myEQ.a.size(); c++){
+                double tempElement = (double) myEQ.a.get(Pivot.row).get(c);
+                myEQ.a.get(Pivot.row).set(c, tempElement/Pivot.value);
+            }
+                myEQ.b.set(Pivot.row, (double)myEQ.b.get(Pivot.row)/Pivot.value);
+            //System.out.println("1 . Matrix A: " + Arrays.deepToString(myEQ.a.toArray()) + " b: " + Arrays.toString(myEQ.b.toArray()));
+
+        // -----------------------------------
+        // STEP C: Process Other Rows
+        // -----------------------------------  
+            for(int oRow = 0; oRow <myEQ.a.size(); oRow ++){if(oRow != Pivot.row){
+                double ratio = (double) myEQ.a.get(oRow).get(Pivot.column);
+                for(int c=0; c<myEQ.a.size(); c++){
+                double tempElement = (double) myEQ.a.get(oRow).get(c);
+                    myEQ.a.get(oRow).set(c, tempElement - ratio*(double)myEQ.a.get(Pivot.row).get(c) );
+                }
+                    myEQ.b.set(oRow, (double) myEQ.b.get(oRow) - ratio*(double)myEQ.b.get(Pivot.row));
+            }}
+            //System.out.println("2 . Matrix A: " + Arrays.deepToString(myEQ.a.toArray()) + " b: " + Arrays.toString(myEQ.b.toArray()));
+        }
+        }
+        
+
+        // -----------------------------------
+        // STEP D: Solve by back substitution
+        // -----------------------------------
+
+            
+            
+            for(int row = myEQ.a.size()-1; row>=0; row-- ){
+                double oSum = 0.0;
+                for(int col=0; col<myEQ.b.size(); col++){
+                    if(col != row){
+                        if((double) myEQ.a.get(row).get(col)!= 0){
+                            oSum += (double) myEQ.a.get(row).get(col) * x[col];
+                        } else {
+                            oSum += 0;
+                        }
+                    }
+                }
+                //System.out.println("3. Matrix A: " + Arrays.deepToString(myEQ.a.toArray()) + " b: " + Arrays.toString(myEQ.b.toArray()));
+                //System.out.println("oSUM: "+oSum+" coefficient: "+(double)myEQ.a.get(row).get(row)+" row: "+ row +" b: "+ myEQ.b.get(row));
+                x[row] = (myEQ.b.get(row)- oSum)/(double)myEQ.a.get(row).get(row);
+                //System.out.println(x[row]);
+            }
+
+        
+        return x;
     }
     
     void solve() throws IOException {
